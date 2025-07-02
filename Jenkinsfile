@@ -35,8 +35,19 @@ pipeline {
             }
         }
 
+        stage('localhost'){
+            steps{
+                echo 'Starting server on port 9000 for 2 minutes...'
+                bat '''
+                    start "" cmd /c "java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=9000"
+                    timeout /t 120 /nobreak
+                    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9000 ^| findstr LISTENING') do taskkill /PID %%a /F
+                '''
+            }
+        }
+    
     }
-
+    
     post {
         success {
             echo 'Build & Test pipeline completed successfully!'
