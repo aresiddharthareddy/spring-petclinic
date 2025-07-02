@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                echo '📦 Building the project...'
+                echo 'Building the project...'
                 sh 'mvn clean compile'
             }
         }
@@ -39,10 +39,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build & Test pipeline completed successfully!'
+            echo 'Build & Test pipeline completed successfully!'
         }
         failure {
-            echo '❌ Build failed. Check the logs.'
+            echo 'Build failed. Check the logs.'
         }
     }
 }
