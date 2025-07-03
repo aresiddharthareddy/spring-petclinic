@@ -41,7 +41,8 @@ pipeline {
                 bat '''
                     start "" java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=9000
                     ping -n 121 127.0.0.1 > nul
-                    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9000 ^| findstr LISTENING') do taskkill /PID %%a /F
+                    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9000 ^| findstr LISTENING') do taskkill /PID %%a /F || exit 0
+
                 '''
             }
         }
