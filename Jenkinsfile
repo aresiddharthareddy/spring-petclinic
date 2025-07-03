@@ -35,12 +35,12 @@ pipeline {
             }
         }
 
-        stage('localhost'){
-            steps{
+        stage('Run on localhost for 2 minutes') {
+            steps {
                 echo 'Starting server on port 9000 for 2 minutes...'
                 bat '''
-                    start "" cmd /c "java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=9000"
-                    timeout /t 120 /nobreak
+                    start "" java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=9000
+                    ping -n 121 127.0.0.1 > nul
                     for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9000 ^| findstr LISTENING') do taskkill /PID %%a /F
                 '''
             }
