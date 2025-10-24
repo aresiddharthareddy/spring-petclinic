@@ -2,29 +2,31 @@ pipeline {
     agent any
 
     environment {
-        OPENAI_API_KEY = 'AIzaSyCkOH15hWhIviZPpF_jZ9T0gsBAlmYSDtI'  // replace with your key
+        OPENAI_API_KEY = 'AIzeSyCkOH15hWfIviZPpF_jZ9T9gsBAlmYSDtI'  // replace with your key
         EMAIL_TO = 'sare@osidigital.com'
+        APP_PORT = '9000'
+        BUILD_LOG = "${WORKSPACE}\\build.log"
     }
 
     stages {
         stage('Build') {
             steps {
                 echo 'Building the project...'
-                bat 'mvn clean compile'
+                bat "mvn clean compile > ${BUILD_LOG} 2>&1"
             }
         }
 
         stage('Test') {
             steps {
                 echo 'Running tests...'
-                bat 'mvn test'
+                bat "mvn test >> ${BUILD_LOG} 2>&1"
             }
         }
 
         stage('Package') {
             steps {
                 echo 'Packaging the project...'
-                bat 'mvn package'
+                bat "mvn package >> ${BUILD_LOG} 2>&1"
             }
         }
 
@@ -35,14 +37,14 @@ pipeline {
             }
         }
 
-        stage('Run on localhost for 2 minutes') {
+        stage('Deploy Application') {
             steps {
-                echo 'Starting server on port 9000 for 2 minutes...'
-                bat '''
-                    start "" java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=9000
-                    ping -n 121 127.0.0.1 > nul
-                    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9000 ^| findstr LISTENING') do taskkill /PID %%a /F || exit 0
-                '''
+                echo "Deploying Spring Petclinic on port ${APP_PORT}..."
+                bat """
+                    start "" java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=${APP_PORT} >> ${BUILD_LOG} 2>&1
+                    ping -n 10 127.0.0.1 > nul
+                """
+                echo "Application deployed. Check http://localhost:${APP_PORT}"
             }
         }
     }
@@ -52,11 +54,8 @@ pipeline {
             echo 'Pipeline finished — generating AI log summary...'
 
             script {
-                // Read the Jenkins log file
-                def logFile = "${WORKSPACE}\\pipeline.log"
-                bat "powershell -Command \"Get-Content ${BUILD_URL}consoleText | Out-File -FilePath ${logFile}\""
-
-                def logs = readFile(logFile).replaceAll("\\r?\\n"," ")
+                // Read local log file
+                def logs = readFile(BUILD_LOG).replaceAll("\\r?\\n"," ")
 
                 // Call GenAI API using curl
                 def apiResponse = bat(
@@ -64,7 +63,7 @@ pipeline {
                         curl https://api.openai.com/v1/chat/completions ^
                         -H "Content-Type: application/json" ^
                         -H "Authorization: Bearer ${OPENAI_API_KEY}" ^
-                        -d "{\\"model\\": \\"gpt-4\\", \\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"Summarize these CI/CD logs in bullet points, highlight failures, root causes, and suggested fixes: ${logs}\\"}], \\"temperature\\":0}" ^
+                        -d "{\\"model\\": \\"gpt-4\\", \\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"Summarize these deployment-level CI/CD logs in bullet points, highlight failures, root causes, and suggested fixes: ${logs}\\"}], \\"temperature\\":0}" ^
                         -s
                     """,
                     returnStdout: true
@@ -74,13 +73,13 @@ pipeline {
                 def json = jsonSlurper.parseText(apiResponse)
                 def summary = json.choices[0].message.content
 
-                echo "==== CI/CD Log Summary ===="
+                echo "==== CI/CD Deployment Log Summary ===="
                 echo summary
 
-                // Send summary email using Jenkins mail plugin
+                // Send summary email
                 mail to: "${EMAIL_TO}",
-                     subject: "CI/CD Pipeline Summary - Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
-                     body: "Hello Team,\n\nHere is the AI-generated CI/CD pipeline summary:\n\n${summary}\n\nCheck full logs at: ${env.BUILD_URL}"
+                     subject: "Deployment Pipeline Summary - Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
+                     body: "Hello Team,\n\nHere is the AI-generated deployment pipeline summary:\n\n${summary}\n\nCheck full logs at: ${env.BUILD_URL}"
             }
         }
     }
