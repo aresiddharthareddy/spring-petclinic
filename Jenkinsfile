@@ -2,8 +2,9 @@ pipeline {
     agent any
 
     environment {
-        OPENAI_API_KEY = 'AIzeSyCkOH15hWfIviZPpF_jZ9T9gsBAlmYSDtI'  // replace with your key
+        OPENAI_API_KEY = 'AIzaSyCkOH15hWhIviZPpF_jZ9T0gsBAlmYSDtI' // <-- Replace with actual key (don’t commit it)
         EMAIL_TO = 'sare@osidigital.com'
+        ARTIFACT = 'target/*.jar'
         APP_PORT = '9000'
         BUILD_LOG = "${WORKSPACE}\\build.log"
     }
@@ -33,54 +34,83 @@ pipeline {
         stage('Archive Artifact') {
             steps {
                 echo 'Archiving JAR file...'
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                archiveArtifacts artifacts: "${ARTIFACT}", fingerprint: true
             }
         }
 
-        stage('Deploy Application') {
+        stage('Run Application for 2 Minutes') {
             steps {
-                echo "Deploying Spring Petclinic on port ${APP_PORT}..."
+                echo "Starting Spring Petclinic on port ${APP_PORT}..."
                 bat """
                     start "" java -jar target\\spring-petclinic-3.5.0-SNAPSHOT.jar --server.port=${APP_PORT} >> ${BUILD_LOG} 2>&1
-                    ping -n 10 127.0.0.1 > nul
+                    ping -n 121 127.0.0.1 > nul
+                    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :${APP_PORT} ^| findstr LISTENING') do taskkill /PID %%a /F || exit 0
                 """
-                echo "Application deployed. Check http://localhost:${APP_PORT}"
+                echo "Application stopped after 2 minutes."
             }
         }
     }
 
     post {
         always {
-            echo 'Pipeline finished — generating AI log summary...'
+            echo 'Pipeline finished — generating AI summary...'
 
             script {
-                // Read local log file
-                def logs = readFile(BUILD_LOG).replaceAll("\\r?\\n"," ")
+                // Safely read build logs
+                def logs = readFile(BUILD_LOG).take(12000).replaceAll("\\r?\\n"," ")
 
-                // Call GenAI API using curl
+                // Prepare JSON payload
+                def payload = """
+                {
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Summarize this Jenkins CI/CD build and deployment log in bullet points. Highlight key build steps, any failures, and suggested fixes: ${logs}"
+                        }
+                    ],
+                    "temperature": 0.2
+                }
+                """
+
+                // Call OpenAI API (Windows-friendly curl)
                 def apiResponse = bat(
                     script: """
-                        curl https://api.openai.com/v1/chat/completions ^
+                        curl -s https://api.openai.com/v1/chat/completions ^
                         -H "Content-Type: application/json" ^
                         -H "Authorization: Bearer ${OPENAI_API_KEY}" ^
-                        -d "{\\"model\\": \\"gpt-4\\", \\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"Summarize these deployment-level CI/CD logs in bullet points, highlight failures, root causes, and suggested fixes: ${logs}\\"}], \\"temperature\\":0}" ^
-                        -s
+                        -d "${payload.replace('"', '\\"')}"
                     """,
                     returnStdout: true
                 ).trim()
 
-                def jsonSlurper = new groovy.json.JsonSlurper()
-                def json = jsonSlurper.parseText(apiResponse)
-                def summary = json.choices[0].message.content
+                // Parse response JSON
+                def json = new groovy.json.JsonSlurper().parseText(apiResponse)
+                def summary = json?.choices?.getAt(0)?.message?.content ?: "AI summary not available."
 
-                echo "==== CI/CD Deployment Log Summary ===="
+                echo "==== AI Generated CI/CD Summary ===="
                 echo summary
 
-                // Send summary email
+                // Email summary to team
                 mail to: "${EMAIL_TO}",
-                     subject: "Deployment Pipeline Summary - Job '${env.JOB_NAME}' [#${env.BUILD_NUMBER}]",
-                     body: "Hello Team,\n\nHere is the AI-generated deployment pipeline summary:\n\n${summary}\n\nCheck full logs at: ${env.BUILD_URL}"
+                     subject: "CI/CD Build Summary - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                     body: """Hello Team,
+
+The CI/CD pipeline has completed. Below is the AI-generated summary:
+
+${summary}
+
+You can view detailed logs here: ${env.BUILD_URL}
+"""
             }
+        }
+
+        success {
+            echo '✅ Build & Test pipeline completed successfully!'
+        }
+
+        failure {
+            echo '❌ Build failed. Check the logs.'
         }
     }
 }
