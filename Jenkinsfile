@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY'  // replace with your key
-        EMAIL_TO = 'developer@example.com'
+        OPENAI_API_KEY = 'AIzaSyCkOH15hWhIviZPpF_jZ9T0gsBAlmYSDtI'  // replace with your key
+        EMAIL_TO = 'sare@osidigital.com'
     }
 
     stages {
